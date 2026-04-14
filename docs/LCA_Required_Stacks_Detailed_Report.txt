@@ -1,0 +1,624 @@
+================================================================================
+     LCA REQUIRED STACKS — DETAILED RESOURCE & FUNCTIONALITY REPORT
+     For Use Case: Live Call Transcript + Call Summary + Post-Call Summary
+     Account: 025066253495 | Region: us-east-1
+     Report Generated: 2026-03-30
+================================================================================
+
+These 4 stacks are the ONLY ones required for your use case.
+All other stacks (QNABOT, BEDROCKKB, AGENTASSISTSETUP) are unused overhead.
+
+================================================================================
+STACK 1: AISTACK  (LCA-AISTACK-SPFQARZ85S1Q)
+================================================================================
+
+PURPOSE:
+  The core and most critical stack. Handles everything — transcription
+  processing, data storage, the React web UI, user authentication, and
+  the real-time GraphQL API that powers the agent's screen.
+
+TOTAL RESOURCES: 74
+
+--------------------------------------------------------------------------------
+RESOURCE LIST & FUNCTIONALITY
+--------------------------------------------------------------------------------
+
+1.  AppSyncApi  (AWS::AppSync::GraphQLApi)
+    - The real-time GraphQL API that connects the backend to the UI.
+    - Agents' browsers subscribe to this API to receive live transcript
+      updates, call status changes, and summaries as they happen.
+    - Without this, the UI cannot receive any live data.
+
+2.  AppSyncApiCache  (AWS::AppSync::ApiCache)
+    - Caches GraphQL query responses to reduce DynamoDB reads.
+    - Improves UI load speed when agents view call history or transcripts.
+
+3.  AppSyncSchema  (AWS::AppSync::GraphQLSchema)
+    - Defines the data structure/schema for the GraphQL API.
+    - Specifies what data fields are available (calls, transcripts,
+      summaries, sentiment, categories, etc.)
+
+4.  AppSyncDataSource  (AWS::AppSync::DataSource)
+    - Connects AppSync to DynamoDB (EventSourcingTable).
+    - All GraphQL queries/mutations read/write through this data source.
+
+5.  AppSyncCwlRole  (AWS::IAM::Role)
+    - IAM role that allows AppSync to write logs to CloudWatch.
+    - Used for debugging and monitoring API activity.
+
+6.  AppSyncDynamoDbRole  (AWS::IAM::Role)
+    - IAM role that allows AppSync to read/write DynamoDB.
+    - Required for all data operations through the GraphQL API.
+
+7.  EventSourcingTable  (AWS::DynamoDB::Table)
+    - The main database for the entire LCA solution.
+    - Stores: call records, transcript segments, sentiment scores,
+      call categories, AI summaries, agent info, call status.
+    - Every transcript line your agent sees is stored here.
+
+8.  CallEventProcessorFunction  (AWS::Lambda::Function)
+    - The most important Lambda in the stack.
+    - Reads call audio events from the Kinesis stream in real-time.
+    - Sends audio to Amazon Transcribe for transcription.
+    - Writes each transcript segment to DynamoDB.
+    - Triggers AppSync mutations so the UI updates instantly.
+    - Detects sentiment (positive/negative/neutral) per segment.
+    - Detects call categories/keywords based on rules.
+
+9.  CallEventProcessorFunctionRole  (AWS::IAM::Role)
+    - IAM role for CallEventProcessorFunction.
+    - Grants permissions to read Kinesis, call Transcribe, write
+      DynamoDB, and call AppSync.
+
+10. CallEventProcessorFunctionTranscriptKds  (AWS::Lambda::EventSourceMapping)
+    - Connects the Kinesis Data Stream to CallEventProcessorFunction.
+    - Automatically triggers the Lambda whenever new call data arrives
+      in the stream.
+
+11. DataStreamConsumer  (AWS::Kinesis::StreamConsumer)
+    - An enhanced fan-out consumer on the Kinesis stream.
+    - Gives CallEventProcessorFunction dedicated throughput (2MB/s)
+      so it can process audio in real-time without delays.
+
+12. AsyncTranscriptSummaryOrchestrator  (AWS::Lambda::Function)
+    - Triggered when a call ends.
+    - Fetches the full transcript from DynamoDB.
+    - Decides which LLM to use (Bedrock or Anthropic).
+    - Calls the appropriate summary Lambda.
+    - Saves the generated summary back to DynamoDB → shown in UI.
+
+13. AsyncTranscriptSummaryOrchestratorExecutionRole  (AWS::IAM::Role)
+    - IAM role for the summary orchestrator Lambda.
+    - Permissions to read DynamoDB, invoke other Lambdas, call Bedrock.
+
+14. BedrockSummaryLambda  (AWS::Lambda::Function)
+    - Generates post-call summaries using Amazon Bedrock (Claude/Titan).
+    - Takes the full transcript + prompt template as input.
+    - Returns a structured summary (issue, resolution, action items, etc.)
+    - Result is saved to DynamoDB and displayed in the UI.
+
+15. BedrockSummaryLambdaExecutionRole  (AWS::IAM::Role)
+    - IAM role for BedrockSummaryLambda.
+    - Grants permissions to call Amazon Bedrock APIs.
+
+16. LLMAnthropicSummaryLambda  (AWS::Lambda::Function)
+    - Alternative summary Lambda using Anthropic Claude API directly.
+    - Used if Bedrock is not the selected LLM provider.
+    - Same output as BedrockSummaryLambda — post-call summary.
+
+17. LLMAnthropicSummaryLambdaExecutionRole  (AWS::IAM::Role)
+    - IAM role for LLMAnthropicSummaryLambda.
+
+18. FetchTranscript  (AWS::Lambda::Function)
+    - Fetches and formats the complete transcript of a call as a string.
+    - Used by summary Lambdas to get the full call text before
+      sending it to the LLM for summarization.
+    - Also exposed as an output for external integrations.
+
+19. LambdaFetchTranscriptExecutionRole  (AWS::IAM::Role)
+    - IAM role for FetchTranscript Lambda.
+    - Permissions to read from DynamoDB.
+
+20. TranscriptEnrichmentPythonLayer  (AWS::Lambda::LayerVersion)
+    - Shared Python library layer used by transcript processing Lambdas.
+    - Contains common utilities for parsing and enriching transcript data.
+
+21. UserPool  (AWS::Cognito::UserPool)
+    - Manages agent/admin user accounts for the LCA UI.
+    - Handles login, password policies, and account verification.
+    - Agents authenticate here before accessing the UI.
+
+22. UserPoolClient  (AWS::Cognito::UserPoolClient)
+    - The app client configuration for the Cognito User Pool.
+    - Used by the React UI (Amplify) to communicate with Cognito
+      for login/logout/token refresh.
+
+23. IdentityPool  (AWS::Cognito::IdentityPool)
+    - Provides temporary AWS credentials to authenticated users.
+    - Allows the UI to directly call AppSync with proper permissions.
+
+24. CognitoIdentityPoolSetRole  (AWS::Cognito::IdentityPoolRoleAttachment)
+    - Assigns IAM roles to authenticated/unauthenticated Cognito users.
+    - Controls what AWS resources logged-in agents can access.
+
+25. CognitoAuthorizedRole  (AWS::IAM::Role)
+    - IAM role for authenticated Cognito users (agents).
+    - Grants permission to call AppSync API from the browser.
+
+26. AdminGroup  (AWS::Cognito::UserPoolGroup)
+    - A user group in Cognito for admin users.
+    - Admins have elevated permissions vs regular agents.
+
+27. AdminUser  (AWS::Cognito::UserPoolUser)
+    - The default admin user account created on deployment.
+
+28. AdminUserToGroupAttachment  (AWS::Cognito::UserPoolUserToGroupAttachment)
+    - Assigns the AdminUser to the AdminGroup.
+
+29. CognitoUserPoolEmailDomainVerifyFunction  (AWS::Lambda::Function)
+    - Custom Lambda that enforces email domain restrictions on signup.
+    - Only allows users with approved email domains to register.
+
+30. CognitoUserPoolEmailDomainVerifyFunctionRole  (AWS::IAM::Role)
+    - IAM role for the email domain verification Lambda.
+
+31. CognitoUserPoolEmailDomainVerifyPermission  (AWS::Lambda::Permission)
+    - Grants Cognito permission to invoke the email verify Lambda
+      as a pre-signup trigger.
+
+32. CognitoUserPoolEmailDomainVerifyPermissionReady  (AWS::CloudFormation::WaitConditionHandle)
+    - Ensures the Lambda trigger is ready before Cognito uses it.
+
+33. WebAppBucket  (AWS::S3::Bucket)
+    - Stores all the React UI files (HTML, CSS, JS, assets).
+    - This is where the built frontend application lives.
+
+34. WebAppBucketPolicy  (AWS::S3::BucketPolicy)
+    - Restricts access to the S3 bucket so only CloudFront can read it.
+    - Prevents direct public access to the bucket.
+
+35. WebAppCloudFrontDistribution  (AWS::CloudFront::Distribution)
+    - The CDN that serves the React UI to agents' browsers.
+    - URL: https://dna44ohv0ueyn.cloudfront.net/
+    - Caches and delivers UI files globally with low latency.
+
+36. CloudFrontOriginAccessIdentity  (AWS::CloudFront::CloudFrontOriginAccessIdentity)
+    - A special identity that allows CloudFront to securely read
+      from the private S3 WebAppBucket.
+
+37. LCAUICodeBuildProject  (AWS::CodeBuild::Project)
+    - Builds the React UI application during deployment.
+    - Compiles the frontend code and uploads it to WebAppBucket.
+
+38. LCAUICodeBuildServiceRole  (AWS::IAM::Role)
+    - IAM role for the CodeBuild project.
+    - Permissions to upload built files to S3.
+
+39. LambdaCodeBuildStartBuild  (AWS::Lambda::Function)
+    - Triggers the CodeBuild project during CloudFormation deployment.
+    - Ensures the UI is built and deployed as part of the stack.
+
+40. LambdaCodeBuildStartBuildExecutionRole  (AWS::IAM::Role)
+    - IAM role for the CodeBuild trigger Lambda.
+
+41. CodeBuildRun  (Custom::CodeBuildRun)
+    - CloudFormation custom resource that invokes the CodeBuild Lambda.
+    - Runs the UI build as part of stack creation/update.
+
+42. SQSManagedKey  (AWS::KMS::Key)
+    - KMS encryption key for SQS queues used in the stack.
+    - Ensures messages are encrypted at rest.
+
+43. CategorySNSTopic  (AWS::SNS::Topic)
+    - SNS topic that sends notifications when a call matches a
+      defined category or keyword alert rule.
+    - Can notify supervisors when sensitive words are detected.
+
+44. AgentAssistBotIdentityPool  (AWS::Cognito::IdentityPool)
+    - Separate identity pool for the agent assist bot.
+    - (Deployed as part of AISTACK but used by agent assist features)
+
+45. AgentAssistBotIdentityPoolSetRole  (AWS::Cognito::IdentityPoolRoleAttachment)
+    - Role attachment for the agent assist bot identity pool.
+
+46. AgentAssistBotUnauthRole  (AWS::IAM::Role)
+    - IAM role for unauthenticated agent assist bot access.
+
+47. BucketDeleteLambda  (AWS::Lambda::Function)
+    - Utility Lambda that empties S3 buckets before stack deletion.
+    - Ensures CloudFormation can cleanly delete S3 buckets on teardown.
+
+48. BucketDeleteLambdaRole  (AWS::IAM::Role)
+    - IAM role for BucketDeleteLambda.
+
+49. RemoveWebAppBucketOnDelete  (Custom::RemoveWebAppBucketOnDelete)
+    - CloudFormation custom resource that triggers BucketDeleteLambda
+      when the stack is deleted, to clear the WebAppBucket first.
+
+50. BedrockPreviewBoto3Stack  (AWS::CloudFormation::Stack)
+    - Nested stack within AISTACK that packages the Bedrock SDK.
+    - Provides the boto3 layer needed for Bedrock API calls.
+
+AppSync Resolvers (GraphQL API operations) — 16 total:
+
+51. CreateCallAppSyncResolver
+    - Creates a new call record in DynamoDB when a call starts.
+
+52. GetCallAppSyncResolver
+    - Fetches details of a single call (used when agent opens a call).
+
+53. ListCallsAppSyncResolver
+    - Lists all calls for the main dashboard view.
+
+54. ListCallsDateHourAppSyncResolver
+    - Lists calls filtered by date and hour (for time-based browsing).
+
+55. ListCallsDateShardAppSyncResolver
+    - Lists calls by shard (for high-volume partitioning).
+
+56. AddTranscriptSegmentAppSyncResolver
+    - Appends a new transcript line to the call record.
+    - Triggered for every sentence transcribed in real-time.
+
+57. AddCallCategoryAppSyncResolver
+    - Tags a call with a detected category (e.g., "complaint", "billing").
+
+58. AddCallSummaryTextAppSyncResolver
+    - Saves the AI-generated summary to the call record.
+    - Triggers UI update so agents see the summary appear.
+
+59. AddIssuesDetectedAppSyncResolver
+    - Records any issues or problems detected during the call.
+
+60. UpdateCallStatusAppSyncResolver
+    - Updates call status (e.g., STARTED → IN_PROGRESS → ENDED).
+
+61. UpdateAgentAppSyncResolver
+    - Updates agent information associated with the call.
+
+62. UpdateCallAggregationAppSyncResolver
+    - Updates aggregated call statistics (duration, sentiment score, etc.)
+
+63. UpdateRecordingUrlAppSyncResolver
+    - Saves the S3 URL of the call recording once it's stored.
+
+64. UpdatePcaUrlAppSyncResolver
+    - Saves the Post Call Analytics URL for deeper analysis.
+
+65. GetTranscriptSegmentsAppSyncResolver
+    - Fetches all transcript segments for a call.
+
+66. GetTranscriptSegmentsWithSentimentAppSyncResolver
+    - Fetches transcript segments along with sentiment scores per line.
+    - Used to show colour-coded sentiment in the UI.
+
+67. UpdatePcaUrlAppSyncResolver
+    - Saves post-call analytics reference URL.
+
+IAM Roles (supporting roles):
+68. CognitoAuthorizedRole — authenticated user permissions
+69. AppSyncCwlRole — AppSync CloudWatch logging
+70. AppSyncDynamoDbRole — AppSync DynamoDB access
+71. LCAUICodeBuildServiceRole — CodeBuild S3 access
+72. LambdaCodeBuildStartBuildExecutionRole — CodeBuild trigger
+73. LambdaFetchTranscriptExecutionRole — transcript fetch
+74. AsyncTranscriptSummaryOrchestratorExecutionRole — summary orchestration
+
+
+================================================================================
+STACK 2: CONNECTINTEGRATIONSTACK  (LCA-CONNECTINTEGRATIONSTACK-9RNPIXIVT080)
+================================================================================
+
+PURPOSE:
+  Integrates Amazon Connect (your phone/contact center system) with the
+  LCA pipeline. Listens for call events from Connect and routes them into
+  the Kinesis stream so LCA can process them.
+
+TOTAL RESOURCES: 8
+
+--------------------------------------------------------------------------------
+RESOURCE LIST & FUNCTIONALITY
+--------------------------------------------------------------------------------
+
+1.  ContactEventProcessorFunction  (AWS::Lambda::Function)
+    - The bridge between Amazon Connect and LCA.
+    - Triggered by EventBridge when a call starts or ends in Connect.
+    - Reads contact data (call ID, agent ID, phone numbers, timestamps).
+    - Writes a call start/end event into the LCA Kinesis Data Stream.
+    - This is what makes a call appear in the LCA UI when it begins.
+
+2.  ContactEventProcessorFunctionRole  (AWS::IAM::Role)
+    - IAM role for ContactEventProcessorFunction.
+    - Permissions: read Connect contact data, write to Kinesis stream,
+      write CloudWatch logs.
+
+3.  EventBridgeRuleToTriggerContactEventFunction  (AWS::Events::Rule)
+    - An EventBridge rule that watches for Amazon Connect contact events.
+    - Events monitored: INITIATED (call starts), CONNECTED, DISCONNECTED
+      (call ends).
+    - Automatically triggers ContactEventProcessorFunction when these
+      events occur.
+
+4.  AllowEventBridgeToCallContactEventFunction  (AWS::Lambda::Permission)
+    - Grants EventBridge permission to invoke ContactEventProcessorFunction.
+    - Security boundary — only EventBridge can trigger this Lambda,
+      not other services.
+
+5.  AssociateInstanceFunction  (AWS::Lambda::Function)
+    - Runs once during deployment to associate your Amazon Connect
+      instance with the LCA stack.
+    - Links the Connect instance so EventBridge can receive its events.
+
+6.  AssociateInstanceFunctionResource  (AWS::CloudFormation::CustomResource)
+    - CloudFormation custom resource that invokes AssociateInstanceFunction
+      during stack deployment.
+    - Ensures the Connect association is set up before the stack finishes.
+
+7.  LambdaRole  (AWS::IAM::Role)
+    - IAM role for AssociateInstanceFunction.
+    - Permissions to call Amazon Connect APIs for instance association.
+
+8.  TranscriptProcessorConnectPolicy  (AWS::IAM::Policy)
+    - IAM policy attached to the transcript processor.
+    - Grants permissions specific to processing Amazon Connect audio
+      and transcript data.
+
+HOW THIS STACK CONTRIBUTES:
+  Without this stack, Amazon Connect calls would never enter the LCA
+  pipeline. This is the entry point — call starts in Connect →
+  EventBridge fires → ContactEventProcessorFunction runs →
+  call record created in LCA → agent sees the call in the UI.
+
+
+================================================================================
+STACK 3: LLMTEMPLATESTACK  (LCA-LLMTEMPLATESTACK-17VG7ZP9TO9VS)
+================================================================================
+
+PURPOSE:
+  Manages the AI prompt templates that control how post-call summaries
+  are generated. Stores prompts in DynamoDB so admins can customize
+  summary format without redeploying the stack.
+
+TOTAL RESOURCES: 5
+
+--------------------------------------------------------------------------------
+RESOURCE LIST & FUNCTIONALITY
+--------------------------------------------------------------------------------
+
+1.  LLMPromptTemplateTable  (AWS::DynamoDB::Table)
+    - DynamoDB table that stores all LLM prompt templates.
+    - Contains two key items:
+        a) DefaultSummaryPromptTemplates — read-only, shipped with LCA.
+           Contains the default instructions sent to the LLM for
+           generating summaries (e.g., "Summarize the call, identify
+           the issue, resolution, and next steps").
+        b) CustomSummaryPromptTemplates — editable by admins.
+           Any values here override the defaults. Preserved during
+           stack updates so customizations aren't lost.
+    - When a call ends, BedrockSummaryLambda reads this table to
+      get the prompt before calling the LLM.
+
+2.  LLMPromptUploadFunction  (AWS::Lambda::Function)
+    - Runs once during deployment.
+    - Uploads the default prompt templates into LLMPromptTemplateTable.
+    - Ensures the table is populated with working defaults on first deploy.
+
+3.  LLMPromptUploadFunctionLogGroup  (AWS::Logs::LogGroup)
+    - CloudWatch log group for LLMPromptUploadFunction.
+    - Captures logs from the template upload process.
+
+4.  LLMPromptUploadRole  (AWS::IAM::Role)
+    - IAM role for LLMPromptUploadFunction.
+    - Permissions to write to DynamoDB (LLMPromptTemplateTable).
+
+5.  LLMStorePromptTemplates  (AWS::CloudFormation::CustomResource)
+    - CloudFormation custom resource that triggers LLMPromptUploadFunction
+      during stack creation and updates.
+    - Ensures templates are always up to date when the stack changes.
+
+HOW THIS STACK CONTRIBUTES:
+  Controls the quality and format of every post-call summary your agents
+  see. The prompt template is the instruction given to the AI — it
+  determines what the summary focuses on (issue, resolution, customer
+  sentiment, action items, etc.). Admins can edit the custom prompts
+  in DynamoDB console without any code changes or redeployment.
+
+  Console Link to Edit Custom Prompts:
+  https://us-east-1.console.aws.amazon.com/dynamodbv2/home?region=us-east-1
+  #edit-item?itemMode=2&pk=CustomSummaryPromptTemplates&table=
+  LCA-LLMTEMPLATESTACK-17VG7ZP9TO9VS-LLMPromptTemplateTable-KIPZX21ULBNQ
+
+
+================================================================================
+STACK 4: VPCSTACK  (LCA-VPCSTACK-FTQ6GQL2D5SQ)
+================================================================================
+
+PURPOSE:
+  Creates the networking foundation — a Virtual Private Cloud (VPC) with
+  public and private subnets. All Lambda functions and other services run
+  inside this VPC for security and isolation.
+
+TOTAL RESOURCES: 21
+
+--------------------------------------------------------------------------------
+RESOURCE LIST & FUNCTIONALITY
+--------------------------------------------------------------------------------
+
+1.  VPC  (AWS::EC2::VPC)
+    - The isolated virtual network for the entire LCA stack.
+    - All resources communicate privately within this network.
+    - Isolated from other AWS accounts and the public internet
+      (except through controlled gateways).
+
+2.  VPCIGW  (AWS::EC2::InternetGateway)
+    - Attaches to the VPC to allow resources in public subnets
+      to communicate with the internet.
+    - Required for NAT Gateways to route outbound traffic.
+
+3.  VPCGateway  (AWS::EC2::VPCGatewayAttachment)
+    - Attaches the Internet Gateway (VPCIGW) to the VPC.
+    - Without this, the VPC has no internet connectivity at all.
+
+4.  PublicSubnet1  (AWS::EC2::Subnet)
+    - A subnet in Availability Zone 1 with internet access.
+    - Hosts NAT Gateway 1.
+    - Resources here can be reached from the internet (if configured).
+
+5.  PublicSubnet2  (AWS::EC2::Subnet)
+    - A subnet in Availability Zone 2 with internet access.
+    - Hosts NAT Gateway 2.
+    - Provides high availability across two AZs.
+
+6.  PrivateSubnet1  (AWS::EC2::Subnet)
+    - A subnet in Availability Zone 1 WITHOUT direct internet access.
+    - Lambda functions run here for security.
+    - Outbound internet access goes through NAT Gateway 1.
+
+7.  PrivateSubnet2  (AWS::EC2::Subnet)
+    - A subnet in Availability Zone 2 WITHOUT direct internet access.
+    - Provides redundancy — if AZ1 fails, services continue in AZ2.
+
+8.  PublicSubnet1NATGateway  (AWS::EC2::NatGateway)
+    - NAT Gateway in AZ1 public subnet.
+    - Allows Lambdas in PrivateSubnet1 to make outbound internet
+      calls (e.g., calling Bedrock API, Transcribe API) without
+      being directly exposed to the internet.
+
+9.  PublicSubnet2NATGateway  (AWS::EC2::NatGateway)
+    - NAT Gateway in AZ2 public subnet.
+    - Same purpose as NATGateway1 but for PrivateSubnet2.
+    - Provides redundancy.
+
+10. NATGatewayEIP1  (AWS::EC2::EIP)
+    - Elastic (static) IP address assigned to NAT Gateway 1.
+    - All outbound traffic from private subnet 1 appears to come
+      from this fixed IP address.
+
+11. NATGatewayEIP2  (AWS::EC2::EIP)
+    - Elastic IP for NAT Gateway 2.
+    - Same purpose for private subnet 2.
+
+12. PublicSubnet1RouteTable  (AWS::EC2::RouteTable)
+    - Routing rules for PublicSubnet1.
+    - Routes internet-bound traffic to the Internet Gateway.
+
+13. PublicSubnet2RouteTable  (AWS::EC2::RouteTable)
+    - Routing rules for PublicSubnet2.
+
+14. PublicSubnet1DefaultRoute  (AWS::EC2::Route)
+    - The default route (0.0.0.0/0) in PublicSubnet1's route table.
+    - Sends all internet-bound traffic to the Internet Gateway.
+
+15. PublicSubnet2DefaultRoute  (AWS::EC2::Route)
+    - Default route for PublicSubnet2 to Internet Gateway.
+
+16. PublicSubnet1RouteTableAssociation  (AWS::EC2::SubnetRouteTableAssociation)
+    - Associates PublicSubnet1 with its route table.
+
+17. PublicSubnet2RouteTableAssociation  (AWS::EC2::SubnetRouteTableAssociation)
+    - Associates PublicSubnet2 with its route table.
+
+18. VPCPrivateSubnet1RouteTable  (AWS::EC2::RouteTable)
+    - Routing rules for PrivateSubnet1.
+    - Routes internet-bound traffic to NAT Gateway 1 (not IGW directly).
+
+19. VPCPrivateSubnet2RouteTable  (AWS::EC2::RouteTable)
+    - Routing rules for PrivateSubnet2.
+
+20. VPCPrivateSubnet1DefaultRoute  (AWS::EC2::Route)
+    - Default route for PrivateSubnet1 → NAT Gateway 1.
+
+21. VPCPrivateSubnet2DefaultRoute  (AWS::EC2::Route)
+    - Default route for PrivateSubnet2 → NAT Gateway 2.
+
+22. VPCPrivateSubnet1RouteTableAssociation  (AWS::EC2::SubnetRouteTableAssociation)
+    - Links PrivateSubnet1 to its route table.
+
+23. VPCPrivateSubnet2RouteTableAssociation  (AWS::EC2::SubnetRouteTableAssociation)
+    - Links PrivateSubnet2 to its route table.
+
+24. VPCFlowLog  (AWS::EC2::FlowLog)
+    - Captures all network traffic metadata flowing through the VPC.
+    - Logs source/destination IPs, ports, protocols, and allow/deny.
+    - Critical for security auditing and troubleshooting network issues.
+
+25. VPCFlowLogsLogGroup  (AWS::Logs::LogGroup)
+    - CloudWatch Log Group where VPC flow logs are stored.
+    - Retained for security and compliance review.
+
+26. VPCFlowLogsRole  (AWS::IAM::Role)
+    - IAM role that allows the VPC to write flow logs to CloudWatch.
+
+HOW THIS STACK CONTRIBUTES:
+  Provides the secure network backbone. Lambda functions (transcript
+  processor, summary generators) run in private subnets — no direct
+  internet exposure. NAT Gateways allow these Lambdas to call AWS
+  services (Transcribe, Bedrock, DynamoDB) securely. The dual-AZ
+  setup ensures the system stays up even if one availability zone
+  has an outage.
+
+
+================================================================================
+SECTION: END-TO-END FLOW USING ONLY THESE 4 STACKS
+================================================================================
+
+  CALL STARTS IN AMAZON CONNECT
+           |
+           | EventBridge contact event (INITIATED)
+           v
+  [CONNECTINTEGRATIONSTACK]
+  ContactEventProcessorFunction
+           |
+           | Writes call record to Kinesis
+           v
+  Kinesis Data Stream (CallDataStream) ← top-level resource
+           |
+           | Stream triggers Lambda
+           v
+  [AISTACK]
+  CallEventProcessorFunction (runs in VPC private subnet)
+           |
+           |── Sends audio to Amazon Transcribe
+           |── Writes transcript segments → EventSourcingTable (DynamoDB)
+           |── AppSync mutation → UI subscription fires
+           v
+  AGENT SEES LIVE TRANSCRIPT ON SCREEN
+  (CloudFront → WebAppBucket → React UI → AppSync subscription)
+           |
+           | Call ends
+           v
+  [AISTACK]
+  AsyncTranscriptSummaryOrchestrator
+           |
+           |── FetchTranscript Lambda → gets full transcript from DynamoDB
+           |── Reads prompt from [LLMTEMPLATESTACK] LLMPromptTemplateTable
+           |── Calls BedrockSummaryLambda → Amazon Bedrock LLM
+           v
+  POST-CALL SUMMARY SAVED TO DYNAMODB
+           |
+           v
+  AGENT SEES SUMMARY IN UI
+
+
+================================================================================
+SUMMARY: RESOURCE COUNT PER STACK
+================================================================================
+
+Stack                       Resources    Key Services
+--------------------------- ------------ ------------------------------------
+AISTACK                     74           Lambda(15+), AppSync, DynamoDB,
+                                         S3, CloudFront, Cognito, CodeBuild,
+                                         KMS, SNS, IAM(15+)
+CONNECTINTEGRATIONSTACK     8            Lambda(2), EventBridge, IAM(2),
+                                         CloudFormation Custom Resources
+LLMTEMPLATESTACK            5            DynamoDB(1), Lambda(1), IAM(1),
+                                         CloudWatch Logs(1)
+VPCSTACK                    26           VPC, Subnets(4), NAT Gateways(2),
+                                         Internet Gateway, Route Tables(4),
+                                         Elastic IPs(2), Flow Logs, IAM(1)
+--------------------------- ------------ ------------------------------------
+TOTAL                       113          Across 4 stacks
+
+================================================================================
+END OF REPORT
+================================================================================

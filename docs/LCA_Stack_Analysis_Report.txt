@@ -1,0 +1,459 @@
+================================================================================
+          LCA CLOUDFORMATION STACK - COMPLETE ANALYSIS REPORT
+          Amazon Transcribe Live Call Analytics with Agent Assist v0.9.7
+          Account: 025066253495 | Region: us-east-1
+          Report Generated: 2026-03-30
+================================================================================
+
+
+================================================================================
+SECTION 1: WHAT IS THE LCA STACK?
+================================================================================
+
+The LCA (Live Call Analytics) stack is an AWS solution that:
+
+  1. TRANSCRIBES phone calls in real-time using Amazon Transcribe
+  2. ANALYZES call content with AI — detecting sentiment, categories, and issues
+  3. ASSISTS agents during live calls with AI-powered suggestions and answers
+  4. SUMMARIZES calls automatically using Large Language Models (LLMs)
+  5. DISPLAYS everything in a React web UI accessible via CloudFront
+
+Use Case: A call center agent handles a customer call. LCA transcribes it
+live, detects the customer's sentiment, surfaces relevant knowledge base
+answers for the agent, and generates a summary when the call ends.
+
+Stack Status:    CREATE_COMPLETE
+Stack Version:   v0.9.7 (SO9072)
+UI Endpoint:     https://dna44ohv0ueyn.cloudfront.net/
+Agent Assist:    https://ptiq9dep50.execute-api.us-east-1.amazonaws.com/prod/pages/designer
+
+
+================================================================================
+SECTION 2: TOP-LEVEL STACK RESOURCES
+================================================================================
+
+Resource                        Type                        Purpose
+------------------------------ --------------------------- ----------------------
+CallDataStream                  AWS::Kinesis::Stream        Ingests live call audio
+RecordingsBucket                AWS::S3::Bucket             Stores call recordings
+LCASettingsParameter            AWS::SSM::Parameter         Central config store
+StacknameCheckFunction          AWS::Lambda::Function       Validates stack name length
+ToJSONFunction                  AWS::Lambda::Function       Converts settings to JSON
+UpdateLCASettingsFunction       AWS::Lambda::Function       Updates LCA config
+ValidateParametersFunction      AWS::Lambda::Function       Validates deploy params
+ValidateParametersFunctionLogGroup AWS::Logs::LogGroup      Logs for validation
+
+Nested Stacks (7 total):
+  - AISTACK
+  - AGENTASSISTSETUP
+  - BEDROCKKB
+  - CONNECTINTEGRATIONSTACK
+  - LLMTEMPLATESTACK
+  - QNABOT
+  - VPCSTACK
+
+
+================================================================================
+SECTION 3: NESTED STACK BREAKDOWN
+================================================================================
+
+--------------------------------------------------------------------------------
+3.1  AISTACK  (LCA-AISTACK-SPFQARZ85S1Q)
+     THE CORE STACK — Heart of the entire LCA solution
+--------------------------------------------------------------------------------
+
+PURPOSE:
+  This is the most critical nested stack. It handles transcription processing,
+  data storage, the web UI, authentication, and the GraphQL API that ties
+  everything together.
+
+KEY SERVICES DEPLOYED:
+
+  COMPUTE / PROCESSING:
+    - CallEventProcessorFunction      Lambda — processes real-time call events from Kinesis
+    - AsyncAgentAssistOrchestrator    Lambda — orchestrates agent assist suggestions
+    - AsyncTranscriptSummaryOrchestrator Lambda — triggers post-call AI summaries
+    - BedrockSummaryLambda            Lambda — generates summaries via Amazon Bedrock
+    - LLMAnthropicSummaryLambda       Lambda — generates summaries via Anthropic Claude
+    - FetchTranscript                 Lambda — exports call transcripts as text
+    - CognitoUserPoolEmailDomainVerifyFunction Lambda — enforces email domain restrictions
+
+  DATA / API:
+    - AppSyncApi                      AWS::AppSync::GraphQLApi — real-time GraphQL API
+    - AppSyncApiCache                 AWS::AppSync::ApiCache — caches GraphQL responses
+    - EventSourcingTable              AWS::DynamoDB::Table — stores all call events
+    - DataStreamConsumer              AWS::Kinesis::StreamConsumer — reads from Kinesis
+
+  AppSync Resolvers (GraphQL operations):
+    - CreateCallAppSyncResolver       — creates new call record
+    - GetCallAppSyncResolver          — fetches a single call
+    - ListCallsAppSyncResolver        — lists all calls
+    - ListCallsDateHourAppSyncResolver  — lists calls by date/hour
+    - ListCallsDateShardAppSyncResolver — lists calls by shard
+    - AddTranscriptSegmentAppSyncResolver — appends transcript lines
+    - AddCallCategoryAppSyncResolver  — tags call with categories
+    - AddCallSummaryTextAppSyncResolver — saves AI summary
+    - AddIssuesDetectedAppSyncResolver — records detected issues
+    - UpdateCallStatusAppSyncResolver — updates call status (active/ended)
+    - UpdateAgentAppSyncResolver      — updates agent info
+    - UpdateCallAggregationAppSyncResolver — updates call stats
+    - UpdateRecordingUrlAppSyncResolver — saves recording S3 URL
+    - UpdatePcaUrlAppSyncResolver     — saves post-call analytics URL
+    - GetTranscriptSegmentsAppSyncResolver — fetches transcript
+    - GetTranscriptSegmentsWithSentimentAppSyncResolver — fetches transcript + sentiment
+
+  AUTHENTICATION:
+    - UserPool                        AWS::Cognito::UserPool — manages user accounts
+    - UserPoolClient                  AWS::Cognito::UserPoolClient — app client config
+    - IdentityPool                    AWS::Cognito::IdentityPool — federated identity
+    - AdminGroup                      AWS::Cognito::UserPoolGroup — admin users group
+    - AgentAssistBotIdentityPool      AWS::Cognito::IdentityPool — bot auth
+    - CognitoIdentityPoolSetRole      — sets IAM roles for identity pool
+
+  WEB UI:
+    - WebAppBucket                    AWS::S3::Bucket — hosts React app files
+    - WebAppBucketPolicy              AWS::S3::BucketPolicy — access control
+    - WebAppCloudFrontDistribution    AWS::CloudFront::Distribution — CDN for UI
+    - CloudFrontOriginAccessIdentity  — secure S3 access from CloudFront
+    - LCAUICodeBuildProject           AWS::CodeBuild::Project — builds the React UI
+    - LambdaCodeBuildStartBuild       Lambda — triggers CodeBuild on deploy
+
+  SECURITY:
+    - SQSManagedKey                   AWS::KMS::Key — encryption key
+    - TranscriptEnrichmentPythonLayer AWS::Lambda::LayerVersion — shared Python libs
+
+  NOTIFICATIONS:
+    - CategorySNSTopic                AWS::SNS::Topic — alerts for matched categories/keywords
+
+CONTRIBUTION TO FINAL OUTPUT:
+  This stack IS the product. It processes every call, stores every transcript,
+  serves the UI, and provides the real-time GraphQL API that the frontend
+  uses to display live call data.
+
+
+--------------------------------------------------------------------------------
+3.2  AGENTASSISTSETUP  (LCA-AGENTASSISTSETUP-PT0Y3TA0WT44)
+     Wires up AI-powered agent assist features
+--------------------------------------------------------------------------------
+
+PURPOSE:
+  Configures the agent assist pipeline — connecting QnABot, Bedrock Knowledge
+  Base, and call summarization together so agents get real-time answers and
+  post-call summaries.
+
+KEY RESOURCES:
+    - SetupFunction                   Lambda — runs setup logic on deploy
+    - QNABedrockKnowledgeBaseFunction Lambda — queries Bedrock KB for answers
+    - QNASummarizeCallFunction        Lambda — summarizes calls via QnABot hook
+    - LambdaHookSummarizeCallRole     IAM Role — permissions for summarization
+    - Boto3Layer                      Lambda Layer — shared AWS SDK library
+    - GetLowercaseFunction            Lambda — utility for name normalization
+    - Various CloudWatch Log Groups   — logging for each Lambda
+
+CONTRIBUTION TO FINAL OUTPUT:
+  When an agent asks a question during a call, this stack's Lambda functions
+  query the knowledge base and return answers. When a call ends, the
+  summarization hook triggers and saves the AI-generated summary to DynamoDB,
+  which then appears in the UI.
+
+
+--------------------------------------------------------------------------------
+3.3  BEDROCKKB  (LCA-BEDROCKKB-1PC4Q3MA0KM4I)
+     Amazon Bedrock Knowledge Base with OpenSearch Serverless
+--------------------------------------------------------------------------------
+
+PURPOSE:
+  Creates and manages the AI knowledge base that powers agent assist answers.
+  Uses web crawling to ingest content and OpenSearch Serverless for vector
+  search (semantic search).
+
+KEY RESOURCES:
+    - KnowledgeBase                   AWS::Bedrock::KnowledgeBase — the KB itself
+    - KnowledgeBaseServiceRole        IAM Role — permissions for Bedrock
+    - OSSCollection                   AWS::OpenSearchServerless::Collection — vector store
+    - OSSDataAccessPolicy             OpenSearch access control
+    - OSSEncryptionPolicy             OpenSearch encryption
+    - OSSNetworkPolicy                OpenSearch network access
+    - OSSIndexCustomResource          Custom — creates the vector index
+    - OSSIndexCustomResourceFunction  Lambda — manages OSS index creation
+    - OSSSetupLambdaFunction          Lambda — sets up OpenSearch
+    - WebCrawlerKBDataSource          Custom — configures web crawler data source
+    - WebCrawlerKBDataSourceFunction  Lambda — manages crawler config
+    - GetSeedUrlsFunction             Lambda — resolves seed URLs for crawling
+    - OpenSearchPyLayer               Lambda Layer — OpenSearch Python client
+    - AdjustedStackName               Custom — normalizes stack name for OSS
+
+CONTRIBUTION TO FINAL OUTPUT:
+  When an agent asks a question, Bedrock searches this knowledge base using
+  semantic vector search and returns the most relevant answer. The knowledge
+  base is populated by crawling configured web URLs.
+
+
+--------------------------------------------------------------------------------
+3.4  CONNECTINTEGRATIONSTACK  (LCA-CONNECTINTEGRATIONSTACK-9RNPIXIVT080)
+     Amazon Connect phone system integration
+--------------------------------------------------------------------------------
+
+PURPOSE:
+  Integrates LCA with Amazon Connect (AWS's cloud contact center). Listens
+  for contact events and bridges Connect's call data into the LCA pipeline.
+
+KEY RESOURCES:
+    - ContactEventProcessorFunction   Lambda — processes Amazon Connect contact events
+    - AssociateInstanceFunction       Lambda — associates Connect instance with LCA
+    - AssociateInstanceFunctionResource Custom — runs association on deploy
+    - EventBridgeRuleToTriggerContactEventFunction AWS::Events::Rule — triggers on contact events
+    - AllowEventBridgeToCallContactEventFunction Lambda::Permission — EventBridge invoke permission
+    - TranscriptProcessorConnectPolicy IAM Policy — permissions for transcript processing
+    - LambdaRole                      IAM Role — execution role
+
+CONTRIBUTION TO FINAL OUTPUT:
+  Captures call start/end events from Amazon Connect and routes them into
+  the Kinesis data stream so LCA can process them. Without this, Connect
+  calls would not appear in the LCA UI.
+
+
+--------------------------------------------------------------------------------
+3.5  LLMTEMPLATESTACK  (LCA-LLMTEMPLATESTACK-17VG7ZP9TO9VS)
+     LLM Prompt Template Management
+--------------------------------------------------------------------------------
+
+PURPOSE:
+  Manages the AI prompt templates used to generate call summaries. Stores
+  both default and custom prompts in DynamoDB, allowing admins to customize
+  how summaries are written without redeploying.
+
+KEY RESOURCES:
+    - LLMPromptTemplateTable          AWS::DynamoDB::Table — stores prompt templates
+    - LLMPromptUploadFunction         Lambda — uploads initial templates on deploy
+    - LLMPromptUploadFunctionLogGroup CloudWatch Log Group
+    - LLMPromptUploadRole             IAM Role
+    - LLMStorePromptTemplates         Custom — triggers template upload on deploy
+
+DynamoDB Items:
+    - DefaultSummaryPromptTemplates   — read-only default prompts
+    - CustomSummaryPromptTemplates    — editable custom overrides
+
+CONTRIBUTION TO FINAL OUTPUT:
+  Controls the quality and format of AI-generated call summaries. Admins can
+  customize what the LLM focuses on (e.g., "summarize the issue and resolution")
+  without code changes, and changes persist across stack updates.
+
+
+--------------------------------------------------------------------------------
+3.6  QNABOT  (LCA-QNABOT-OU53IVVRLADF)
+     QnABot on AWS — Agent Assist Content Designer & Q&A Engine
+--------------------------------------------------------------------------------
+
+PURPOSE:
+  The most resource-intensive nested stack. QnABot is a full Q&A system that:
+  - Provides a Content Designer UI for admins to create Q&A pairs
+  - Powers the agent assist chatbot with Lex v2
+  - Stores and retrieves Q&A content from OpenSearch
+  - Streams usage data to Kinesis Firehose for analytics
+
+KEY SERVICES:
+  SEARCH ENGINE:
+    - LMAQnaBotOpensearchDomain       AWS::OpenSearchService::Domain — Q&A search index
+    - ESProxyLambda                   Lambda — proxies OpenSearch API calls
+    - ESQueryLambda                   Lambda — executes search queries
+    - ESQidLambda                     Lambda — looks up Q&A by ID
+    - ESWarmerLambda                  Lambda — keeps OpenSearch warm (scheduled)
+    - ESCleaningLambda                Lambda — cleans old data (scheduled)
+    - ESLoggingLambda                 Lambda — logs search activity
+
+  BOT / NLU:
+    - LexV2Bot                        Custom — Amazon Lex v2 bot for NLU
+    - Lexv2BotLambda                  Lambda — manages Lex bot
+    - LexBuildLambda                  Lambda — builds/trains Lex bot
+    - LexBuildLambdaStart/Poll        Lambda — async Lex build management
+    - LexProxyLambda                  Lambda — proxies Lex API calls
+    - FulfillmentLambda               Lambda — fulfills Lex intents with answers
+    - MessageLambda                   Lambda — handles chat messages
+
+  CONTENT DESIGNER API (REST API):
+    - API                             AWS::ApiGateway::RestApi — designer backend
+    - Stage, Deployment               — API Gateway deployment
+    - Questions/Question resources    — CRUD for Q&A pairs
+    - Documents/Examples/Jobs         — content management endpoints
+    - Export/Import stacks            — backup and restore Q&A content
+
+  STORAGE:
+    - Bucket                          S3 — main Q&A content bucket
+    - AssetBucket                     S3 — Lambda deployment assets
+    - ExportBucket                    S3 — Q&A export files
+    - ImportBucket                    S3 — Q&A import files
+    - MetricsBucket                   S3 — usage metrics
+    - ContentDesignerOutputBucket     S3 — designer build output
+    - UsersTable                      DynamoDB — designer user accounts
+
+  AUTHENTICATION:
+    - UserPool                        Cognito — designer login
+    - ClientDesigner/ClientClient     Cognito Clients — app access
+    - IdPool                          Cognito Identity Pool
+    - OpenSearchDashboardsIdPool      — OpenSearch Dashboards access
+
+  ANALYTICS:
+    - FeedbackKinesisFirehose         Kinesis Firehose — user feedback stream
+    - GeneralKinesisFirehose          Kinesis Firehose — general usage stream
+    - dashboard                       CloudWatch Dashboard — monitoring
+
+  LAMBDA LAYERS (shared libraries):
+    - AwsSdkLayerLambdaLayer          — AWS SDK
+    - QnABotCommonLambdaLayer         — QnABot shared utilities
+    - EsProxyLambdaLayer              — OpenSearch proxy utilities
+    - CfnLambdaLayer                  — CloudFormation utilities
+    - CommonModulesLambdaLayer        — common Node.js modules
+
+CONTRIBUTION TO FINAL OUTPUT:
+  Powers the entire agent assist chatbot. When an agent clicks on a suggested
+  answer or asks a question, QnABot searches its OpenSearch index, runs it
+  through Lex for intent understanding, and returns the best answer. Admins
+  use the Content Designer UI to add, edit, and manage Q&A content.
+
+
+--------------------------------------------------------------------------------
+3.7  VPCSTACK  (LCA-VPCSTACK-FTQ6GQL2D5SQ)
+     Networking Foundation
+--------------------------------------------------------------------------------
+
+PURPOSE:
+  Creates the VPC and networking infrastructure that all other stacks use
+  for secure, private communication between AWS services.
+
+KEY RESOURCES:
+    - VPC                             AWS::EC2::VPC — isolated network
+    - PublicSubnet1 / PublicSubnet2   — subnets with internet access
+    - PrivateSubnet1 / PrivateSubnet2 — subnets without direct internet access
+    - VPCIGW                          AWS::EC2::InternetGateway — internet access
+    - PublicSubnet1NATGateway         AWS::EC2::NatGateway — NAT for private subnets
+    - PublicSubnet2NATGateway         AWS::EC2::NatGateway — NAT (AZ redundancy)
+    - NATGatewayEIP1 / EIP2           AWS::EC2::EIP — static IPs for NAT gateways
+    - Route Tables & Associations     — traffic routing rules
+    - VPCFlowLog                      AWS::EC2::FlowLog — network traffic logging
+    - VPCFlowLogsLogGroup             CloudWatch Log Group — flow log storage
+    - VPCFlowLogsRole                 IAM Role — flow log permissions
+
+CONTRIBUTION TO FINAL OUTPUT:
+  Provides the secure network foundation. Lambda functions and other services
+  run in private subnets (no direct internet exposure). NAT Gateways allow
+  private resources to reach the internet (e.g., to call external APIs)
+  without being directly accessible from it. Flow logs capture all network
+  traffic for security auditing.
+
+
+================================================================================
+SECTION 4: END-TO-END DATA FLOW
+================================================================================
+
+  CALL STARTS
+      |
+      v
+  Amazon Connect (phone system)
+      |
+      | Contact event via EventBridge
+      v
+  CONNECTINTEGRATIONSTACK — ContactEventProcessorFunction
+      |
+      | Writes call event
+      v
+  Kinesis Data Stream (CallDataStream)
+      |
+      | Streamed in real-time
+      v
+  AISTACK — CallEventProcessorFunction
+      |
+      |-- Transcribes audio via Amazon Transcribe
+      |-- Writes transcript segments to DynamoDB (EventSourcingTable)
+      |-- Pushes updates via AppSync GraphQL subscriptions
+      |
+      v
+  REACT UI (CloudFront → S3 → WebApp)
+      |
+      | Agent sees live transcript + sentiment
+      |
+      | Agent asks a question
+      v
+  AGENTASSISTSETUP — QNABedrockKnowledgeBaseFunction
+      |
+      |-- Queries BEDROCKKB (OpenSearch Serverless vector search)
+      |-- OR queries QNABOT (OpenSearch keyword/semantic search)
+      |
+      v
+  Answer displayed to agent in real-time
+
+  CALL ENDS
+      |
+      v
+  AISTACK — AsyncTranscriptSummaryOrchestrator
+      |
+      |-- Fetches full transcript
+      |-- Calls BedrockSummaryLambda or LLMAnthropicSummaryLambda
+      |-- Uses prompt from LLMTEMPLATESTACK DynamoDB table
+      |
+      v
+  AI Summary saved → displayed in UI
+
+
+================================================================================
+SECTION 5: KEY OUTPUTS & ENDPOINTS
+================================================================================
+
+Output                          Value
+------------------------------ -----------------------------------------------
+UI URL                          https://dna44ohv0ueyn.cloudfront.net/
+Agent Assist Designer           https://ptiq9dep50.execute-api.us-east-1.amazonaws.com/prod/pages/designer
+Kinesis Stream                  LCA-CallDataStream-zZnIA8WhcB9z
+Recordings Bucket               lca-recordingsbucket-kql92kvv3zit
+SNS Alerts Topic                LCA-AISTACK-SPFQARZ85S1Q-CategorySNSTopic-izvuvWnqHvOt
+Fetch Transcript Lambda         arn:aws:lambda:us-east-1:025066253495:function:LCA-AISTACK-SPFQARZ85S1Q-FetchTranscript-JnaXoCqSxT0S
+Call Data Stream ARN            arn:aws:kinesis:us-east-1:025066253495:stream/LCA-CallDataStream-zZnIA8WhcB9z
+
+
+================================================================================
+SECTION 6: FEATURES NOT ENABLED IN THIS DEPLOYMENT
+================================================================================
+
+Feature                         Status
+------------------------------ -----------------------------------------------
+Genesys Audiohook WebSocket     Not enabled
+Talkdesk WebSocket              Not enabled
+LCA WebSocket source            Not enabled
+Demo Asterisk PBX               Not enabled
+Whisper SageMaker ASR           Not enabled (using Amazon Transcribe instead)
+Amazon Connect KVS Lambda       Not enabled (Connect integration via EventBridge)
+
+
+================================================================================
+SECTION 7: SERVICE SUMMARY COUNT
+================================================================================
+
+AWS Service                     Count   Purpose
+------------------------------ ------- ----------------------------------------
+AWS Lambda                      50+     Processing, orchestration, utilities
+AWS AppSync (GraphQL)           1 API   Real-time data API for the UI
+                                16      Resolvers for all GraphQL operations
+Amazon DynamoDB                 3       Call events, prompt templates, QnABot users
+Amazon S3                       10+     UI hosting, recordings, assets, exports
+Amazon CloudFront               1       CDN for React web UI
+Amazon Cognito                  3+      User authentication (UI + QnABot designer)
+Amazon Kinesis Data Stream      1       Real-time call audio ingestion
+Amazon Kinesis Firehose         2       Usage analytics streaming
+Amazon OpenSearch Service       1       QnABot Q&A search engine
+Amazon OpenSearch Serverless    1       Bedrock KB vector search
+Amazon Bedrock (Knowledge Base) 1       AI-powered semantic search
+Amazon Lex v2                   1       Natural language understanding for QnABot
+Amazon API Gateway              1       QnABot Content Designer REST API
+Amazon EventBridge              1 rule  Connect contact event routing
+Amazon SNS                      2       Category alerts + QnABot Kendra topic
+Amazon KMS                      1       Encryption key for SQS
+AWS CodeBuild                   1       Builds and deploys the React UI
+AWS IAM                         30+     Roles and policies for all services
+Amazon VPC                      1       Isolated network with public/private subnets
+AWS SSM Parameter Store         3       Config storage
+Amazon CloudWatch               Logs    Monitoring and logging for all Lambdas
+                                1 Dashboard QnABot metrics dashboard
+
+================================================================================
+END OF REPORT
+================================================================================
