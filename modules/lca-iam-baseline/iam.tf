@@ -8,61 +8,61 @@ locals {
 
   roles = {
     call_event_processor = {
-      role_name     = "call-event-processor-role-${var.lob}"
+      role_name = "call-event-processor-role-${var.lob}"
       trust_service = "lambda.amazonaws.com"
     }
     contact_event_processor = {
-      role_name     = "contact-event-processor-role-${var.lob}"
+      role_name = "contact-event-processor-role-${var.lob}"
       trust_service = "lambda.amazonaws.com"
     }
     fetch_transcript = {
-      role_name     = "fetch-transcript-role-${var.lob}"
+      role_name = "fetch-transcript-role-${var.lob}"
       trust_service = "lambda.amazonaws.com"
     }
     bedrock_summary = {
-      role_name     = "bedrock-summary-role-${var.lob}"
+      role_name = "bedrock-summary-role-${var.lob}"
       trust_service = "lambda.amazonaws.com"
     }
     llm_anthropic_summary = {
-      role_name     = "llm-anthropic-summary-role-${var.lob}"
+      role_name = "llm-anthropic-summary-role-${var.lob}"
       trust_service = "lambda.amazonaws.com"
     }
     async_transcript_summary = {
-      role_name     = "async-transcript-summary-role-${var.lob}"
+      role_name = "async-transcript-summary-role-${var.lob}"
       trust_service = "lambda.amazonaws.com"
     }
     async_agent_assist = {
-      role_name     = "async-agent-assist-role-${var.lob}"
+      role_name = "async-agent-assist-role-${var.lob}"
       trust_service = "lambda.amazonaws.com"
     }
     email_domain_verify = {
-      role_name     = "email-domain-verify-role-${var.lob}"
+      role_name = "email-domain-verify-role-${var.lob}"
       trust_service = "lambda.amazonaws.com"
     }
     associate_instance = {
-      role_name     = "associate-instance-role-${var.lob}"
+      role_name = "associate-instance-role-${var.lob}"
       trust_service = "lambda.amazonaws.com"
     }
     update_lca_settings = {
-      role_name     = "update-lca-settings-role-${var.lob}"
+      role_name = "update-lca-settings-role-${var.lob}"
       trust_service = "lambda.amazonaws.com"
     }
     llm_prompt_upload = {
-      role_name     = "llm-prompt-upload-role-${var.lob}"
+      role_name = "llm-prompt-upload-role-${var.lob}"
       trust_service = "lambda.amazonaws.com"
     }
     appsync_cwl = {
-      role_name     = "appsync-cwl-role-${var.lob}"
+      role_name = "appsync-cwl-role-${var.lob}"
       trust_service = "appsync.amazonaws.com"
     }
     appsync_dynamodb = {
-      role_name     = "appsync-dynamodb-role-${var.lob}"
+      role_name = "appsync-dynamodb-role-${var.lob}"
       trust_service = "appsync.amazonaws.com"
     }
   }
 }
 
-# ── IAM Roles (Lambda + AppSync) ──
+# ── IAM Roles ──
 
 resource "aws_iam_role" "roles" {
   for_each = local.roles
@@ -81,8 +81,7 @@ resource "aws_iam_role" "roles" {
   tags = local.common_tags
 }
 
-# ── Cognito Authorized Role (federated — authenticated) ──
-
+# Cognito authorized role — federated trust
 resource "aws_iam_role" "cognito_authorized" {
   name = "cognito-authorized-role-${var.lob}"
 
@@ -93,7 +92,7 @@ resource "aws_iam_role" "cognito_authorized" {
       Principal = { Federated = "cognito-identity.amazonaws.com" }
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = {
-        StringEquals = {
+        "StringEquals" = {
           "cognito-identity.amazonaws.com:aud" = "PLACEHOLDER_IDENTITY_POOL"
         }
         "ForAnyValue:StringLike" = {
@@ -106,10 +105,7 @@ resource "aws_iam_role" "cognito_authorized" {
   tags = local.common_tags
 }
 
-# ── Agent Assist Unauthenticated Role (federated — unauthenticated) ──
-# NOTE: No aud condition allowed for unauthenticated roles per AWS policy.
-# Only amr = unauthenticated is required.
-
+# Agent assist unauthenticated role — federated trust
 resource "aws_iam_role" "agent_assist_unauth" {
   name = "agent-assist-unauth-role-${var.lob}"
 
@@ -120,7 +116,10 @@ resource "aws_iam_role" "agent_assist_unauth" {
       Principal = { Federated = "cognito-identity.amazonaws.com" }
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = {
-        StringEquals = {
+        "StringEquals" = {
+          "cognito-identity.amazonaws.com:aud" = "PLACEHOLDER_AGENT_ASSIST_POOL"
+        }
+        "ForAnyValue:StringLike" = {
           "cognito-identity.amazonaws.com:amr" = "unauthenticated"
         }
       }
@@ -326,8 +325,8 @@ resource "aws_iam_role_policy" "bedrock_summary_inline" {
         Resource = [var.llm_prompt_table_arn]
       },
       {
-        Effect = "Allow"
-        Action = ["bedrock:InvokeModel"]
+        Effect   = "Allow"
+        Action   = ["bedrock:InvokeModel"]
         Resource = [
           "arn:aws:bedrock:*::foundation-model/*",
           "arn:aws:bedrock:${var.region}:${var.account_id}:inference-profile/*"
@@ -551,5 +550,3 @@ resource "aws_iam_role_policy" "appsync_dynamodb_inline" {
     }]
   })
 }
-
-
