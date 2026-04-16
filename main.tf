@@ -188,31 +188,8 @@ locals {
       environment   = {}
     }
 
-    update_lca_settings = {
-      function_name = "update-lca-settings-${local.lob}"
-      role_key      = "update_lca_settings"
-      runtime       = "python3.12"
-      architectures = ["x86_64"]
-      memory_size   = 128
-      timeout       = 900
-      filename      = "update-lca-settings.zip"
-      handler       = "index.handler"
-      use_layer     = false
-      environment   = {}
-    }
-
-    llm_prompt_upload = {
-      function_name = "llm-prompt-upload-${local.lob}"
-      role_key      = "llm_prompt_upload"
-      runtime       = "python3.12"
-      architectures = ["x86_64"]
-      memory_size   = 128
-      timeout       = 60
-      filename      = "llm-prompt-upload.zip"
-      handler       = "llm_prompt_upload.lambda_handler"
-      use_layer     = false
-      environment   = {}
-    }
+    # NOTE: update_lca_settings and llm_prompt_upload are created in
+    # lca-ssm-baseline (with seed invocation wiring), not here.
 
   }
 }
