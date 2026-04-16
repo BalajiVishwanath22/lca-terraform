@@ -116,6 +116,9 @@ resource "aws_iam_role" "agent_assist_unauth" {
       Principal = { Federated = "cognito-identity.amazonaws.com" }
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = {
+        "StringLike" = {
+          "cognito-identity.amazonaws.com:aud" = "*"
+        }
         "ForAnyValue:StringLike" = {
           "cognito-identity.amazonaws.com:amr" = "unauthenticated"
         }
