@@ -65,6 +65,15 @@ resource "aws_lambda_invocation" "associate_connect_instance" {
 
   input = jsonencode({
     RequestType        = "Create"
+    ResponseURL        = "https://localhost/cfn-response-noop"
+    StackId            = "arn:aws:cloudformation:us-east-1:000000000000:stack/terraform-managed/00000000"
+    RequestId          = "terraform-associate-connect"
+    ResourceType       = "Custom::AssociateConnect"
+    LogicalResourceId  = "AssociateConnect"
+    ResourceProperties = {
+      ConnectInstanceArn = var.connect_instance_arn
+      CallDataStreamArn  = var.call_data_stream_arn
+    }
     ConnectInstanceArn = var.connect_instance_arn
     CallDataStreamArn  = var.call_data_stream_arn
   })

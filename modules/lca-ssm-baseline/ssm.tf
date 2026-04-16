@@ -33,7 +33,18 @@ resource "aws_lambda_invocation" "update_lca_settings_initial" {
   function_name = aws_lambda_function.update_lca_settings.function_name
 
   input = jsonencode({
-    RequestType              = "Create"
+    RequestType        = "Create"
+    ResponseURL        = "https://localhost/cfn-response-noop"
+    StackId            = "arn:aws:cloudformation:us-east-1:000000000000:stack/terraform-managed/00000000"
+    RequestId          = "terraform-update-lca-settings"
+    ResourceType       = "Custom::UpdateLCASettings"
+    LogicalResourceId  = "UpdateLCASettings"
+    ResourceProperties = {
+      LCASettingsName          = aws_ssm_parameter.lca_settings.name
+      LCASettingsKeyValuePairs = {
+        CategoryAlertRegex = var.category_alert_regex
+      }
+    }
     LCASettingsName          = aws_ssm_parameter.lca_settings.name
     LCASettingsKeyValuePairs = {
       CategoryAlertRegex = var.category_alert_regex
@@ -69,6 +80,14 @@ resource "aws_lambda_invocation" "seed_llm_prompts" {
 
   input = jsonencode({
     RequestType                = "Create"
+    ResponseURL                = "https://localhost/cfn-response-noop"
+    StackId                    = "arn:aws:cloudformation:us-east-1:000000000000:stack/terraform-managed/00000000"
+    RequestId                  = "terraform-seed-llm-prompts"
+    ResourceType               = "Custom::SeedLLMPrompts"
+    LogicalResourceId          = "SeedLLMPrompts"
+    ResourceProperties         = {
+      LLMPromptTemplateTableName = var.llm_prompt_table_name
+    }
     LLMPromptTemplateTableName = var.llm_prompt_table_name
   })
 
