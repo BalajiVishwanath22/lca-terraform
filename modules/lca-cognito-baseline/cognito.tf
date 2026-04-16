@@ -148,7 +148,7 @@ resource "null_resource" "admin_user" {
   }
 
   provisioner "local-exec" {
-    interpreter = ["bash", "-c"]
+    interpreter = ["bash", "-l", "-c"]
     command     = "aws cognito-idp admin-create-user --user-pool-id ${aws_cognito_user_pool.main.id} --username ${var.admin_email} --user-attributes Name=email,Value=${var.admin_email} Name=email_verified,Value=true --desired-delivery-mediums EMAIL --region ${var.region} || true"
   }
 
@@ -162,7 +162,7 @@ resource "null_resource" "admin_user_group" {
   }
 
   provisioner "local-exec" {
-    interpreter = ["bash", "-c"]
+    interpreter = ["bash", "-l", "-c"]
     command     = "aws cognito-idp admin-add-user-to-group --user-pool-id ${aws_cognito_user_pool.main.id} --username ${var.admin_email} --group-name Admin --region ${var.region}"
   }
 
