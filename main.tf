@@ -143,20 +143,8 @@ locals {
       }
     }
 
-    email_domain_verify = {
-      function_name = "email-domain-verify-${local.lob}"
-      role_key      = "email_domain_verify"
-      runtime       = "nodejs18.x"
-      architectures = ["x86_64"]
-      memory_size   = 128
-      timeout       = 3
-      filename      = "email-domain-verify.zip"
-      handler       = "index.handler"
-      use_layer     = false
-      environment = {
-        ALLOWED_SIGNUP_EMAIL_DOMAINS = var.lob.allowed_email_domain
-      }
-    }
+    # NOTE: email_domain_verify is created in lca-cognito-baseline
+    # (with Cognito lambda trigger wiring), not here.
 
     contact_event_processor = {
       function_name = "contact-event-processor-${local.lob}"
