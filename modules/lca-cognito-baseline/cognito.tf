@@ -134,31 +134,55 @@ resource "aws_cognito_user_pool_client" "main" {
   generate_secret  = false
 }
 
-resource "aws_cognito_user_pool_group" "admin" {
+resource "aws_cognito_user_group" "admin" {
   name         = "Admin"
   description  = "Administrators"
   precedence   = 0
   user_pool_id = aws_cognito_user_pool.main.id
 }
 
-resource "aws_cognito_user" "admin" {
-  user_pool_id = aws_cognito_user_pool.main.id
-  username     = var.admin_email
-
-  attributes = {
-    email          = var.admin_email
-    email_verified = "true"
+resource "null_resource" "admin_user" {
+  triggers = {
+    user_pool_id = aws_cognito_user_pool.main.id
+    admin_email  = var.admin_email
   }
 
-  desired_delivery_mediums = ["EMAIL"]
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command = <<-EOT
+      aws cognito-idp admin-create-user \
+        --user-pool-id ${aws_cognito_user_pool.main.id} \
+        --username ${var.admin_email} \
+        --user-attributes Name=email,Value=${var.admin_email} Name=email_verified,Value=true \
+        --desired-delivery-mediums EMAIL \
+        --region ${var.region} || true
+    EOT
+  }
 
   depends_on = [aws_lambda_permission.cognito_invoke_email_verify]
 }
 
-resource "aws_cognito_user_in_group" "admin" {
-  user_pool_id = aws_cognito_user_pool.main.id
-  group_name   = aws_cognito_user_pool_group.admin.name
-  username     = aws_cognito_user.admin.username
+resource "null_resource" "admin_user_group" {
+  triggers = {
+    user_pool_id = aws_cognito_user_pool.main.id
+    admin_email  = var.admin_email
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command = <<-EOT
+      aws cognito-idp admin-add-user-to-group \
+        --user-pool-id ${aws_cognito_user_pool.main.id} \
+        --username ${var.admin_email} \
+        --group-name Admin \
+        --region ${var.region}
+    EOT
+  }
+
+  depends_on = [
+    aws_cognito_user_group.admin,
+    null_resource.admin_user
+  ]
 }
 
 resource "aws_cognito_identity_pool" "main" {
