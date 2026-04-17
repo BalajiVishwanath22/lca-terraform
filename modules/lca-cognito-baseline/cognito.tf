@@ -103,6 +103,10 @@ EOF
     ManagedBy   = "Terraform"
     Environment = "production"
   }
+
+  lifecycle {
+    ignore_changes = [schema]
+  }
 }
 
 resource "aws_lambda_permission" "cognito_invoke_email_verify" {
