@@ -28,11 +28,6 @@ variable "lca_settings_parameter_arn" {
   type        = string
 }
 
-variable "recordings_bucket_arn" {
-  description = "ARN of the recordings S3 bucket"
-  type        = string
-}
-
 variable "connect_instance_arn" {
   description = "ARN of the Amazon Connect instance"
   type        = string

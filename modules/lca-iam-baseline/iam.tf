@@ -81,53 +81,6 @@ resource "aws_iam_role" "roles" {
   tags = local.common_tags
 }
 
-# Cognito authorized role — federated trust
-resource "aws_iam_role" "cognito_authorized" {
-  name = "cognito-authorized-role-${var.lob}"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Federated = "cognito-identity.amazonaws.com" }
-      Action    = "sts:AssumeRoleWithWebIdentity"
-      Condition = {
-        "StringEquals" = {
-          "cognito-identity.amazonaws.com:aud" = "PLACEHOLDER_IDENTITY_POOL"
-        }
-        "ForAnyValue:StringLike" = {
-          "cognito-identity.amazonaws.com:amr" = "authenticated"
-        }
-      }
-    }]
-  })
-
-  tags = local.common_tags
-}
-
-# Agent assist unauthenticated role — federated trust
-resource "aws_iam_role" "agent_assist_unauth" {
-  name = "agent-assist-unauth-role-${var.lob}"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Federated = "cognito-identity.amazonaws.com" }
-      Action    = "sts:AssumeRoleWithWebIdentity"
-      Condition = {
-        "StringEquals" = {
-          "cognito-identity.amazonaws.com:aud" = "PLACEHOLDER_AGENT_ASSIST_POOL"
-        }
-        "ForAnyValue:StringLike" = {
-          "cognito-identity.amazonaws.com:amr" = "unauthenticated"
-        }
-      }
-    }]
-  })
-
-  tags = local.common_tags
-}
 
 # ── Managed Policy Attachments ──
 
@@ -348,11 +301,21 @@ resource "aws_iam_role_policy" "llm_anthropic_summary_inline" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["lambda:InvokeFunction"]
-      Resource = ["arn:aws:lambda:${var.region}:${var.account_id}:function:fetch-transcript-${var.lob}"]
-    }]
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["lambda:InvokeFunction"]
+        Resource = ["arn:aws:lambda:${var.region}:${var.account_id}:function:fetch-transcript-${var.lob}"]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters"
+        ]
+        Resource = ["arn:aws:ssm:${var.region}:${var.account_id}:parameter/${var.lob}-*"]
+      }
+    ]
   })
 }
 
@@ -477,57 +440,6 @@ resource "aws_iam_role_policy" "llm_prompt_upload_inline" {
   })
 }
 
-# cognito_authorized
-resource "aws_iam_role_policy" "cognito_authorized_inline" {
-  name = "CognitoAuthorizedPolicy-${var.lob}"
-  role = aws_iam_role.cognito_authorized.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = ["s3:GetObject"]
-        Resource = [
-          var.recordings_bucket_arn,
-          "${var.recordings_bucket_arn}/*"
-        ]
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["ssm:GetParameter"]
-        Resource = [var.lca_settings_parameter_arn]
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["translate:TranslateText"]
-        Resource = ["*"]
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["comprehend:DetectDominantLanguage"]
-        Resource = ["*"]
-      }
-    ]
-  })
-}
-
-# agent_assist_unauth
-resource "aws_iam_role_policy" "agent_assist_unauth_inline" {
-  name = "AgentAssistUnauthPolicy-${var.lob}"
-  role = aws_iam_role.agent_assist_unauth.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["lex:RecognizeText"]
-      Resource = ["arn:aws:lex:${var.region}:${var.account_id}:bot-alias/PLCHLDR/PLCHLDR"]
-    }]
-  })
-}
-
-# appsync_dynamodb
 resource "aws_iam_role_policy" "appsync_dynamodb_inline" {
   name = "AppSyncDynamoDBPolicy-${var.lob}"
   role = aws_iam_role.roles["appsync_dynamodb"].id

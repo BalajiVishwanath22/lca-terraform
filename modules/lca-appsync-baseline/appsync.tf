@@ -3,9 +3,10 @@ resource "aws_appsync_graphql_api" "main" {
   authentication_type = "AMAZON_COGNITO_USER_POOLS"
 
   user_pool_config {
-    user_pool_id   = var.user_pool_id
-    aws_region     = var.region
-    default_action = "ALLOW"
+    user_pool_id        = var.user_pool_id
+    aws_region          = var.region
+    default_action      = "ALLOW"
+    app_id_client_regex = var.user_pool_client_id
   }
 
   additional_authentication_provider {
@@ -55,7 +56,11 @@ resource "aws_appsync_resolver" "create_call" {
   field       = "createCall"
   data_source = aws_appsync_datasource.call_event_sourcing.name
 
-  request_template  = file("${path.module}/../../appsync-files/resolvers/createCall.request.vtl")
+  request_template  = replace(
+    file("${path.module}/../../appsync-files/resolvers/createCall.request.vtl"),
+    "__TABLE_NAME__",
+    var.event_sourcing_table_name
+  )
   response_template = file("${path.module}/../../appsync-files/resolvers/createCall.response.vtl")
 
   depends_on = [aws_appsync_datasource.call_event_sourcing]

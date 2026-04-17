@@ -25,7 +25,7 @@ $util.qr($ctx.args.input.put("Status", "STARTED"))
   "operation" : "TransactWriteItems",
   "transactItems": [
     {
-      "table": "$ctx.stash.get('tableName')",
+      "table": "__TABLE_NAME__",
       "operation": "PutItem",
       "key" : {
         "PK": $util.dynamodb.toDynamoDBJson($PK),
@@ -40,7 +40,7 @@ $util.qr($ctx.args.input.put("Status", "STARTED"))
       }
     },
     {
-      "table": "$ctx.stash.get('tableName')",
+      "table": "__TABLE_NAME__",
       "operation": "PutItem",
       "key" : {
         "PK": $util.dynamodb.toDynamoDBJson($listPk),

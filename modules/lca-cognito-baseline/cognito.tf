@@ -163,7 +163,7 @@ resource "aws_cognito_identity_pool_roles_attachment" "main" {
   identity_pool_id = aws_cognito_identity_pool.main.id
 
   roles = {
-    authenticated = var.cognito_authorized_role_arn
+    authenticated = aws_iam_role.cognito_authorized.arn
   }
 }
 
@@ -183,6 +183,114 @@ resource "aws_cognito_identity_pool_roles_attachment" "agent_assist" {
   identity_pool_id = aws_cognito_identity_pool.agent_assist.id
 
   roles = {
-    unauthenticated = var.agent_assist_unauth_role_arn
+    unauthenticated = aws_iam_role.agent_assist_unauth.arn
   }
+}
+
+# ── Cognito-federated IAM Roles ──
+# These live here (not in IAM module) because they need identity pool IDs
+# in their trust policies, which creates a circular dependency if in IAM.
+
+resource "aws_iam_role" "cognito_authorized" {
+  name = "cognito-authorized-role-${var.lob}"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Federated = "cognito-identity.amazonaws.com" }
+      Action    = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        "StringEquals" = {
+          "cognito-identity.amazonaws.com:aud" = aws_cognito_identity_pool.main.id
+        }
+        "ForAnyValue:StringLike" = {
+          "cognito-identity.amazonaws.com:amr" = "authenticated"
+        }
+      }
+    }]
+  })
+
+  tags = {
+    Project     = "LCA"
+    LOB         = var.lob
+    ManagedBy   = "Terraform"
+    Environment = "production"
+  }
+}
+
+resource "aws_iam_role" "agent_assist_unauth" {
+  name = "agent-assist-unauth-role-${var.lob}"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Federated = "cognito-identity.amazonaws.com" }
+      Action    = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        "StringEquals" = {
+          "cognito-identity.amazonaws.com:aud" = aws_cognito_identity_pool.agent_assist.id
+        }
+        "ForAnyValue:StringLike" = {
+          "cognito-identity.amazonaws.com:amr" = "unauthenticated"
+        }
+      }
+    }]
+  })
+
+  tags = {
+    Project     = "LCA"
+    LOB         = var.lob
+    ManagedBy   = "Terraform"
+    Environment = "production"
+  }
+}
+
+resource "aws_iam_role_policy" "cognito_authorized_inline" {
+  name = "CognitoAuthorizedPolicy-${var.lob}"
+  role = aws_iam_role.cognito_authorized.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = ["s3:GetObject"]
+        Resource = [
+          var.recordings_bucket_arn,
+          "${var.recordings_bucket_arn}/*"
+        ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter"]
+        Resource = [var.lca_settings_parameter_arn]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["translate:TranslateText"]
+        Resource = ["*"]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["comprehend:DetectDominantLanguage"]
+        Resource = ["*"]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "agent_assist_unauth_inline" {
+  name = "AgentAssistUnauthPolicy-${var.lob}"
+  role = aws_iam_role.agent_assist_unauth.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["lex:RecognizeText"]
+      Resource = ["*"]
+    }]
+  })
 }

@@ -29,6 +29,7 @@ locals {
       environment = {
         LOG_LEVEL                                 = "DEBUG"
         POWERTOOLS_SERVICE_NAME                   = "TranscriptProcessor"
+        POWERTOOLS_METRICS_NAMESPACE              = "TranscriptProcessor"
         POWERTOOLS_TRACE_DISABLED                 = "false"
         CALL_AUDIO_SOURCE                         = "Amazon Connect Contact Lens"
         COMPREHEND_LANGUAGE_CODE                  = var.comprehend_language_code
@@ -221,7 +222,6 @@ module "lca_iam" {
   event_sourcing_table_arn   = module.lca_dynamodb.event_sourcing_table_arn
   llm_prompt_table_arn       = module.lca_dynamodb.llm_prompt_table_arn
   lca_settings_parameter_arn = local.lca_settings_parameter_arn
-  recordings_bucket_arn      = module.lca_storage.recordings_bucket_arn
   connect_instance_arn       = var.lob.connect_instance_arn
   call_data_stream_arn       = module.lca_kinesis.stream_arn
   sns_topic_arn              = module.lca_notifications.sns_topic_arn
@@ -262,10 +262,10 @@ module "lca_cognito" {
   admin_email                 = var.lob.admin_email
   allowed_email_domain        = var.lob.allowed_email_domain
   email_domain_verify_role_arn = module.lca_iam.role_arns["email_domain_verify"]
-  cognito_authorized_role_arn = module.lca_iam.role_arns["cognito_authorized"]
-  agent_assist_unauth_role_arn = module.lca_iam.role_arns["agent_assist_unauth"]
+  recordings_bucket_arn       = module.lca_storage.recordings_bucket_arn
   recordings_bucket_name      = module.lca_storage.recordings_bucket_name
   settings_parameter_name     = module.lca_ssm.settings_parameter_name
+  lca_settings_parameter_arn  = local.lca_settings_parameter_arn
 
   depends_on = [
     module.lca_iam,

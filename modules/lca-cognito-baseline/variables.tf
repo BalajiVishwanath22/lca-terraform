@@ -23,18 +23,13 @@ variable "allowed_email_domain" {
   type        = string
 }
 
-variable "cognito_authorized_role_arn" {
-  description = "IAM role ARN for Cognito authorized users"
-  type        = string
-}
-
-variable "agent_assist_unauth_role_arn" {
-  description = "IAM role ARN for agent assist unauthenticated users"
-  type        = string
-}
-
 variable "email_domain_verify_role_arn" {
   description = "IAM role ARN for the email domain verify Lambda"
+  type        = string
+}
+
+variable "recordings_bucket_arn" {
+  description = "ARN of the recordings S3 bucket"
   type        = string
 }
 
@@ -45,5 +40,10 @@ variable "recordings_bucket_name" {
 
 variable "settings_parameter_name" {
   description = "Name of the SSM parameter for LCA settings"
+  type        = string
+}
+
+variable "lca_settings_parameter_arn" {
+  description = "ARN of the SSM parameter for LCA settings"
   type        = string
 }
