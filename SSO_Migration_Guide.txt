@@ -53,7 +53,8 @@ OVERVIEW:
     Metadata:         Use the App Federation Metadata URL from Azure
                       (found in SAML Certificates section of the Enterprise App)
     Attribute mapping:
-      - SAML attribute "email" → Cognito attribute "email"
+      - SAML attribute: http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress
+        Cognito attribute: email
 
 ================================================================================
   STEP 3: UPDATE APP CLIENT IDENTITY PROVIDERS
