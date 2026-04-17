@@ -56,7 +56,7 @@ OVERVIEW:
     Attribute mapping (3 mappings — ALL required):
       User Pool Attribute       SAML Attribute
       -------------------------  ----------------------------------------------------------
-      email                      http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress
+      email                      http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn
       custom:email_alias         http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress
       username                   http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress
 
