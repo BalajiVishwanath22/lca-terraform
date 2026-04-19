@@ -104,9 +104,6 @@ EOF
     Environment = "production"
   }
 
-  lifecycle {
-    ignore_changes = [schema]
-  }
 }
 
 resource "aws_lambda_permission" "cognito_invoke_email_verify" {
@@ -115,6 +112,24 @@ resource "aws_lambda_permission" "cognito_invoke_email_verify" {
   function_name = aws_lambda_function.email_domain_verify.function_name
   principal     = "cognito-idp.amazonaws.com"
   source_arn    = aws_cognito_user_pool.main.arn
+}
+
+resource "aws_cognito_identity_provider" "entraid" {
+  user_pool_id  = aws_cognito_user_pool.main.id
+  provider_name = "EntraID"
+  provider_type = "SAML"
+
+  provider_details = {
+    MetadataURL = var.saml_metadata_url
+    IDPInit     = "true"
+    IDPSignout  = "false"
+  }
+
+  attribute_mapping = {
+    email                = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"
+    "custom:email_alias" = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"
+    username             = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"
+  }
 }
 
 resource "aws_cognito_user_pool_domain" "main" {
@@ -131,7 +146,7 @@ resource "aws_cognito_user_pool_client" "main" {
     "ALLOW_REFRESH_TOKEN_AUTH"
   ]
 
-  supported_identity_providers = ["COGNITO"]
+  supported_identity_providers = ["EntraID"]
 
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["openid", "email", "phone"]
@@ -157,9 +172,7 @@ resource "aws_cognito_user_pool_client" "main" {
   write_attributes = ["email", "custom:email_alias"]
   generate_secret  = false
 
-  lifecycle {
-    ignore_changes = [supported_identity_providers]
-  }
+  depends_on = [aws_cognito_identity_provider.entraid]
 }
 
 resource "aws_cognito_user_group" "admin" {

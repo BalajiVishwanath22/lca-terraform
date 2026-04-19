@@ -76,3 +76,8 @@ variable "is_lambda_agent_assist_enabled" {
   type    = bool
   default = false
 }
+
+variable "saml_metadata_url" {
+  description = "SAML metadata URL for the EntraID identity provider"
+  type        = string
+}

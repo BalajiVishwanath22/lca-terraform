@@ -20,3 +20,5 @@ category_alert_regex               = ".*"
 cloudfront_price_class             = "PriceClass_100"
 is_lex_agent_assist_enabled        = false
 is_lambda_agent_assist_enabled     = false
+
+saml_metadata_url = "https://login.microsoftonline.com/ca9e3c59-d8ec-4ee6-9544-05f62f85ac98/federationmetadata/2007-06/federationmetadata.xml?appid=5b975f83-0067-40e6-9fbf-bf67f3fc2579"

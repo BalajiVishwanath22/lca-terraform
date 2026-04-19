@@ -307,6 +307,7 @@ module "lca_cognito" {
   settings_parameter_name     = module.lca_ssm.settings_parameter_name
   lca_settings_parameter_arn  = local.lca_settings_parameter_arn
   cloudfront_domain           = module.lca_frontend.cloudfront_domain_name
+  saml_metadata_url           = var.saml_metadata_url
 
   depends_on = [
     module.lca_iam,

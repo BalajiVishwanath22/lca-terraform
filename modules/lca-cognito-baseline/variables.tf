@@ -52,3 +52,8 @@ variable "cloudfront_domain" {
   description = "CloudFront distribution domain name (e.g. dxxxxxx.cloudfront.net)"
   type        = string
 }
+
+variable "saml_metadata_url" {
+  description = "SAML metadata URL for the EntraID identity provider"
+  type        = string
+}
